@@ -459,4 +459,54 @@ jobs:
                           conn.doOutput = true
                           val body = JSONObject()
                               .put("model", TTS_MODEL)
-                        
+                              .put("input", text)
+                              .put("voice", TTS_VOICE)
+                              .put("response_format", "wav")
+                          conn.outputStream.use { it.write(body.toString().toByteArray()) }
+                          val audioBytes = conn.inputStream.readBytes()
+                          val file = File(cacheDir, "speech.wav")
+                          FileOutputStream(file).use { it.write(audioBytes) }
+                          runOnUiThread {
+                              val mp = MediaPlayer()
+                              mp.setAudioAttributes(
+                                  AudioAttributes.Builder()
+                                      .setUsage(AudioAttributes.USAGE_MEDIA)
+                                      .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                      .build()
+                              )
+                              mp.setDataSource(file.absolutePath)
+                              mp.setOnCompletionListener { it.release() }
+                              mp.prepare()
+                              mp.start()
+                          }
+                      } catch (e: Exception) {
+                          Log.e("Aris", "TTS error: ${e.message}")
+                      }
+                  }.start()
+              }
+
+              private fun log(msg: String) {
+                  runOnUiThread {
+                      logView.append("\n$msg")
+                      scrollView.post { scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+                  }
+              }
+
+              override fun onDestroy() {
+                  super.onDestroy()
+                  speechRecognizer.destroy()
+              }
+          }
+          EOF8
+
+      - name: Build debug APK
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          gradle assembleDebug -PGROQ_API_KEY="$GROQ_API_KEY" --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aris-ai-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
